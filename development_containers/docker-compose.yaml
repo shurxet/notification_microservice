@@ -1,0 +1,59 @@
+version: '2.23.0'
+
+
+services:
+  postgres:
+    image: postgres:16.0-alpine
+    environment:
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_DB: $POSTGRES_DB
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: on-failure
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+
+  migrations:
+    build:
+      context: ../backend/
+      dockerfile: Dockerfile
+      #image: shurxet/backend_notification_microservice:latest
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: python manage.py migrate
+
+
+  api:
+    build:
+      context: ../backend/
+      dockerfile: Dockerfile
+      #image: shurxet/backend_notification_microservice:latest
+    env_file:
+      - ./.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    volumes:
+      - ../backend/:/app/.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
+    ports:
+      - "8000:8000"
+    restart: always
+    command: python manage.py runserver 0.0.0.0:8000
